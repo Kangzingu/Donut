@@ -1,0 +1,16 @@
+#version 400 core
+
+in vec3 pos;//위치
+in vec3 col;//색
+out vec3 f_col;//넘겨주는 색
+uniform mat4 rotate;//회전
+uniform mat4 translate;//이동
+uniform mat4 scale;//크기
+
+void main()
+{
+
+    gl_Position = translate*rotate*scale*vec4(pos,1.0);
+    gl_PointSize = 3.0;
+	f_col=col;
+}

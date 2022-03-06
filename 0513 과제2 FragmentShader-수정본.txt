@@ -1,0 +1,603 @@
+//C:\Users\kanrh\source\repos\ConsoleApplication7
+#include "stdafx.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <cmath>
+#include <time.h>
+//#include <GL/glew.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <GL/glew.h>
+#include <gl/wglew.h>
+#include <gl/glut.h>
+
+glm::vec3 someThing;
+
+#define ScreenX 480
+#define ScreenY 480
+
+using namespace std;
+
+GLuint g_programID;
+GLuint buf;
+GLuint buf_index;
+
+glm::vec3 strip_trans;
+glm::mat4 strip_rotate;
+glm::mat4 strip_scale;
+
+vector <GLfloat> strip_vect;
+vector <GLuint> strip_vect_index;
+//정보 저장 벡터
+
+GLuint strip_mode;
+GLuint strip_count;
+GLuint strip_count_side;
+GLfloat strip_size;
+GLfloat strip_length;
+GLfloat strip_color[] = { 0,0,0 };
+GLuint LoadShaders(const char* vertex_file_path, const char* fragment_file_path)
+{
+	//create the shaders
+	GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+	GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
+
+	GLint Result = GL_FALSE;
+	int InfoLogLength;
+
+	//Read the vertex shader code from the file
+	string VertexShaderCode;
+	ifstream VertexShaderStream(vertex_file_path, ios::in);
+	if (VertexShaderStream.is_open())
+	{
+		string Line = "";
+		while (getline(VertexShaderStream, Line))
+			VertexShaderCode += "\n" + Line;
+		VertexShaderStream.close();
+	}
+
+	//Compile Vertex Shader
+	printf("Compiling shader : %s\n", vertex_file_path);
+	char const* VertexSourcePointer = VertexShaderCode.c_str();
+	glShaderSource(VertexShaderID, 1, &VertexSourcePointer, NULL);
+	glCompileShader(VertexShaderID);
+
+	//Check Vertex Shader
+	glGetShaderiv(VertexShaderID, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(VertexShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength != 0)
+	{
+		vector<char> VertexShaderErrorMessage(InfoLogLength);
+		glGetShaderInfoLog(VertexShaderID, InfoLogLength, NULL, &VertexShaderErrorMessage[0]);
+		fprintf(stdout, "%s\n", &VertexShaderErrorMessage[0]);
+	}
+
+	//Read the fragment shader code from the file
+	string FragmentShaderCode;
+	ifstream FragmentShaderStream(fragment_file_path, ios::in);
+	if (FragmentShaderStream.is_open())
+	{
+		string Line = "";
+		while (getline(FragmentShaderStream, Line))
+			FragmentShaderCode += "\n" + Line;
+		FragmentShaderStream.close();
+	}
+
+	//Compile Fragment Shader
+	printf("Compiling shader : %s\n", fragment_file_path);
+	char const* FragmentSourcePointer = FragmentShaderCode.c_str();
+	glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer, NULL);
+	glCompileShader(FragmentShaderID);
+
+	//Check Fragment Shader
+	glGetShaderiv(FragmentShaderID, GL_COMPILE_STATUS, &Result);
+	glGetShaderiv(FragmentShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	if (InfoLogLength != 0)
+	{
+		vector<char> FragmentShaderErrorMessage(InfoLogLength);
+		glGetShaderInfoLog(FragmentShaderID, InfoLogLength, NULL, &FragmentShaderErrorMessage[0]);
+		fprintf(stdout, "%s\n", &FragmentShaderErrorMessage[0]);
+	}
+	//Link the program
+	fprintf(stdout, "Linking program\n");
+	GLuint ProgramID = glCreateProgram();
+	glAttachShader(ProgramID, VertexShaderID);
+	glAttachShader(ProgramID, FragmentShaderID);
+	glLinkProgram(ProgramID);
+
+	// Check the program
+	glGetProgramiv(ProgramID, GL_LINK_STATUS, &Result);
+	glGetProgramiv(ProgramID, GL_INFO_LOG_LENGTH, &InfoLogLength);
+	vector<char> ProgramErrorMessage(max(InfoLogLength, int(1)));
+	glGetProgramInfoLog(ProgramID, InfoLogLength, NULL, &ProgramErrorMessage[0]);
+	fprintf(stdout, "%s\n", &ProgramErrorMessage[0]);
+
+	glDeleteShader(VertexShaderID);
+	glDeleteShader(FragmentShaderID);
+
+	return ProgramID;
+}
+
+void change_all() {
+
+}
+void myMouse(int button, int state, int x, int y)
+{
+	if ((button == GLUT_RIGHT_BUTTON) && (state == GLUT_DOWN))//오른쪽버튼, 눌렸을때
+	{//한칸 제거
+		if (strip_count > 0) {
+			for (int i = 0; i < 8 * 6; i++) {//8개 점*xyzRGB(6개)
+				strip_vect.pop_back();
+			}
+			int sum = 0;
+			for (int i = 0; i < 40+(strip_count-1)*2; i++) {//39종류
+				strip_vect_index.pop_back();
+			}
+			strip_count--;
+			glutPostRedisplay();
+		}
+	}
+	if ((button == GLUT_LEFT_BUTTON) && (state == GLUT_DOWN))//왼쪽버튼, 눌렸을때
+	{//한칸 생성
+		if (strip_mode == 0) {
+			glm::mat4 mat_rotate;
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(-30.0f*(strip_count + 1)), glm::vec3(0, 1, 0));
+			for (int i = 0; i < 8; i++) {
+				glm::vec4 vec_result = { strip_vect[i * 6],strip_vect[i * 6 + 1],strip_vect[i * 6 + 2],1 };
+				vec_result = mat_rotate*vec_result;
+				strip_vect.push_back(vec_result.x);
+				strip_vect.push_back(vec_result.y);
+				strip_vect.push_back(vec_result.z);
+				strip_vect.push_back(strip_color[0]);
+				strip_vect.push_back(strip_color[1]);
+				strip_vect.push_back(strip_color[2]);
+				//정보 추가
+			}
+		}
+		else {
+			glm::mat4 mat_translate;
+			mat_translate = glm::translate(glm::mat4(), glm::vec3(0.1*(strip_count+1), 0, 0));
+			for (int i = 0; i < 8; i++) {
+				glm::vec4 vec_result = { strip_vect[i * 6],strip_vect[i * 6 + 1],strip_vect[i * 6 + 2],1 };
+				vec_result = mat_translate*vec_result;
+				strip_vect.push_back(vec_result.x);
+				strip_vect.push_back(vec_result.y);
+				strip_vect.push_back(vec_result.z);
+				strip_vect.push_back(strip_color[0]);
+				strip_vect.push_back(strip_color[1]);
+				strip_vect.push_back(strip_color[2]);
+				//정보 추가
+			}
+		}
+		strip_count++;
+		//인덱스 증가
+		for (int i = 1; i < strip_count; i++) {
+			strip_vect_index.push_back(i * 8);//8
+		}
+		strip_vect_index.push_back(strip_count * 8);//8
+		strip_vect_index.push_back((strip_count - 1) * 8 + 1);//1
+		strip_vect_index.push_back(strip_count * 8 + 1);//9
+		strip_vect_index.push_back((strip_count - 1) * 8 + 2);//2
+		strip_vect_index.push_back(strip_count * 8 + 2);//10
+		strip_vect_index.push_back((strip_count - 1) * 8 + 3);//3 
+		strip_vect_index.push_back(strip_count * 8 + 3);//11
+		strip_vect_index.push_back((strip_count - 1) * 8 + 4);//4
+		strip_vect_index.push_back(strip_count * 8 + 4);//12
+		strip_vect_index.push_back((strip_count - 1) * 8 + 5);//5
+		strip_vect_index.push_back(strip_count * 8 + 5);//13
+		strip_vect_index.push_back((strip_count - 1) * 8 + 6);//6
+		strip_vect_index.push_back(strip_count * 8 + 6);//14
+		strip_vect_index.push_back((strip_count - 1) * 8 + 7);//7
+		strip_vect_index.push_back(strip_count * 8 + 7);//15
+		strip_vect_index.push_back((strip_count - 1) * 8);//0
+														  //왼쪽 대각선 및 수직 지그재그 생성
+		strip_vect_index.push_back(strip_count * 8 + 1);//9
+		strip_vect_index.push_back((strip_count - 1) * 8 + 1);//1
+		strip_vect_index.push_back(strip_count * 8 + 2);//10
+		strip_vect_index.push_back((strip_count - 1) * 8 + 2);//2
+		strip_vect_index.push_back(strip_count * 8 + 3);//11
+		strip_vect_index.push_back((strip_count - 1) * 8 + 3);//3
+		strip_vect_index.push_back(strip_count * 8 + 4);//12
+		strip_vect_index.push_back((strip_count - 1) * 8 + 4);//4
+		strip_vect_index.push_back(strip_count * 8 + 5);//13
+		strip_vect_index.push_back((strip_count - 1) * 8 + 5);//5
+		strip_vect_index.push_back(strip_count * 8 + 6);//14
+		strip_vect_index.push_back((strip_count - 1) * 8 + 6);//6
+		strip_vect_index.push_back(strip_count * 8 + 7);//15
+		strip_vect_index.push_back((strip_count - 1) * 8 + 7);//7
+		strip_vect_index.push_back(strip_count * 8);//8
+													//오른쪽 대각선 및 수직 지그재그 생성
+		strip_vect_index.push_back(strip_count * 8 + 1);//9
+		strip_vect_index.push_back(strip_count * 8 + 2);//10
+		strip_vect_index.push_back(strip_count * 8 + 3);//11
+		strip_vect_index.push_back(strip_count * 8 + 4);//12
+		strip_vect_index.push_back(strip_count * 8 + 5);//13
+		strip_vect_index.push_back(strip_count * 8 + 6);//14
+		strip_vect_index.push_back(strip_count * 8 + 7);//15
+		strip_vect_index.push_back(strip_count * 8);//8
+		for (int i = 1; i <= strip_count; i++) {
+			strip_vect_index.push_back((strip_count-i) * 8);//8
+		}
+													//원 생성
+													//한칸 생성 시 39개씩 필요!
+		glutPostRedisplay();//새로그리기(스크린변경)
+
+	}
+}
+void specialKeys(int key, int x, int y) {
+	switch (key)
+	{
+	case GLUT_KEY_UP:
+		strip_trans[1] += 0.01;
+		break;
+	case GLUT_KEY_DOWN:
+		strip_trans[1] -= 0.01;
+		break;
+	case GLUT_KEY_RIGHT:
+		strip_trans[0] += 0.01;
+		break;
+	case GLUT_KEY_LEFT:
+		strip_trans[0] -= 0.01;
+		break;
+	}
+	glutPostRedisplay();//스크린 변화 반영
+}
+void normalKeys(unsigned char key, int x, int y) {
+	glm::mat4 mat_rotate;
+	mat_rotate = glm::rotate(glm::mat4(), glm::radians(0.0f), glm::vec3(1, 0, 0));
+	glm::mat4 mat_translate;
+	mat_translate = glm::translate(glm::mat4(), glm::vec3(0,0,0));
+	glm::mat4 mat_scale;
+	mat_scale = glm::scale(glm::mat4(), glm::vec3(1, 1, 1));
+	glm::vec4 vec_result;
+	vec_result = { 0, strip_size, 0, 1 };
+	switch (key)
+	{
+	case 122://z
+		if (strip_mode == 0)
+			strip_mode = 1;
+		else
+			strip_mode = 0;
+
+		if (strip_mode == 1) {
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+			vec_result = { 0,strip_size,0,1 };
+			for (int i = 0; i < 8; i++) {
+				strip_vect[i * 6] = vec_result.x;
+				strip_vect[i * 6 + 1] = vec_result.y;
+				strip_vect[i * 6 + 2] = vec_result.z - strip_length;
+				vec_result = mat_rotate*vec_result;
+			}
+			for (int j = 0; j < strip_count; j++) {
+				mat_translate = glm::translate(glm::mat4(), glm::vec3(0.1, 0, 0));
+				for (int i = 0; i < 8; i++) {
+					glm::vec4 vec_result = { strip_vect[(j * 8 + i) * 6],strip_vect[(j * 8 + i) * 6 + 1],strip_vect[(j * 8 + i) * 6 + 2],1 };
+					vec_result = mat_translate*vec_result;
+					strip_vect[((j + 1) * 8 + i) * 6] = vec_result.x;
+					strip_vect[((j + 1) * 8 + i) * 6 + 1] = vec_result.y;
+					strip_vect[((j + 1) * 8 + i) * 6 + 2] = vec_result.z;
+				}
+			}
+		}
+		else {
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+			vec_result = { 0,strip_size,0,1 };
+
+			for (int i = 0; i < 8; i++) {
+				strip_vect[i * 6] = vec_result.x;
+				strip_vect[i * 6 + 1] = vec_result.y;
+				strip_vect[i * 6 + 2] = vec_result.z - strip_length;
+				vec_result = mat_rotate*vec_result;
+			}
+			//첫 원 하나만 증가
+			for (int j = 0; j < strip_count; j++) {
+				mat_rotate = glm::rotate(glm::mat4(), glm::radians(-30.0f), glm::vec3(0, 1, 0));
+				for (int i = 0; i < 8; i++) {
+					glm::vec4 vec_result = { strip_vect[(j * 8 + i) * 6],strip_vect[(j * 8 + i) * 6 + 1],strip_vect[(j * 8 + i) * 6 + 2],1 };
+					vec_result = mat_rotate*vec_result;
+					strip_vect[((j + 1) * 8 + i) * 6] = vec_result.x;
+					strip_vect[((j + 1) * 8 + i) * 6 + 1] = vec_result.y;
+					strip_vect[((j + 1) * 8 + i) * 6 + 2] = vec_result.z;
+				}
+			}
+
+		}
+
+		break;
+	case 113://q
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+		strip_size += 0.01;//원 크기 증가
+		vec_result = { 0,strip_size,0,1 };
+
+		for (int i = 0; i < 8; i++) {
+			strip_vect[i * 6] = vec_result.x;
+			strip_vect[i * 6 + 1] = vec_result.y;
+			strip_vect[i * 6 + 2] = vec_result.z - strip_length;
+			vec_result = mat_rotate*vec_result;
+		}
+		//첫 원 하나만 증가
+		for (int j = 0; j < strip_count; j++) {
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(-30.0f), glm::vec3(0, 1, 0));
+			for (int i = 0; i < 8; i++) {
+				glm::vec4 vec_result = { strip_vect[(j * 8 + i) * 6],strip_vect[(j * 8 + i) * 6 + 1],strip_vect[(j * 8 + i) * 6 + 2],1 };
+				vec_result = mat_rotate*vec_result;
+				strip_vect[((j + 1) * 8 + i) * 6] = vec_result.x;
+				strip_vect[((j + 1) * 8 + i) * 6 + 1] = vec_result.y;
+				strip_vect[((j + 1) * 8 + i) * 6 + 2] = vec_result.z;
+			}
+		}
+		//나머지 원도 크기증가
+		break;
+	case 119://w
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+		strip_size -= 0.01;
+		vec_result = { 0,strip_size,0,1 };
+
+		for (int i = 0; i < 8; i++) {
+			strip_vect[i * 6] = vec_result.x;
+			strip_vect[i * 6 + 1] = vec_result.y;
+			strip_vect[i * 6 + 2] = vec_result.z - strip_length;
+			vec_result = mat_rotate*vec_result;
+		}
+		//첫 원 하나만 증가한거임
+		for (int j = 0; j < strip_count; j++) {
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(-30.0f), glm::vec3(0, 1, 0));
+			for (int i = 0; i < 8; i++) {
+				glm::vec4 vec_result = { strip_vect[(j * 8 + i) * 6],strip_vect[(j * 8 + i) * 6 + 1],strip_vect[(j * 8 + i) * 6 + 2],1 };
+				vec_result = mat_rotate*vec_result;
+				strip_vect[((j + 1) * 8 + i) * 6] = vec_result.x;
+				strip_vect[((j + 1) * 8 + i) * 6 + 1] = vec_result.y;
+				strip_vect[((j + 1) * 8 + i) * 6 + 2] = vec_result.z;
+			}
+		}
+		//나머지 애들 크기증가해야함
+		break;
+	case 97://a
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+		strip_length -= 0.01;//길이 줄인당
+		vec_result = { 0,strip_size,0,1 };
+
+		for (int i = 0; i < 8; i++) {
+			strip_vect[i * 6] = vec_result.x;
+			strip_vect[i * 6 + 1] = vec_result.y;
+			strip_vect[i * 6 + 2] = vec_result.z - strip_length;//길이
+			vec_result = mat_rotate*vec_result;
+		}
+		//첫 원 변경
+		for (int j = 0; j < strip_count; j++) {
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(-30.0f), glm::vec3(0, 1, 0));
+			for (int i = 0; i < 8; i++) {
+				glm::vec4 vec_result = { strip_vect[(j * 8 + i) * 6],strip_vect[(j * 8 + i) * 6 + 1],strip_vect[(j * 8 + i) * 6 + 2],1 };
+				vec_result = mat_rotate*vec_result;
+				strip_vect[((j + 1) * 8 + i) * 6] = vec_result.x;
+				strip_vect[((j + 1) * 8 + i) * 6 + 1] = vec_result.y;
+				strip_vect[((j + 1) * 8 + i) * 6 + 2] = vec_result.z;
+			}
+		}
+		//나머지 애들 변경
+		break;
+	case 115://s
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+		strip_length += 0.01;
+		vec_result = { 0,strip_size,0,1 };
+
+		for (int i = 0; i < 8; i++) {
+			strip_vect[i * 6] = vec_result.x;
+			strip_vect[i * 6 + 1] = vec_result.y;
+			strip_vect[i * 6 + 2] = vec_result.z - strip_length;
+			vec_result = mat_rotate*vec_result;
+		}
+		//첫 원 하나만 증가한거임
+		for (int j = 0; j < strip_count; j++) {
+			mat_rotate = glm::rotate(glm::mat4(), glm::radians(-30.0f), glm::vec3(0, 1, 0));
+			for (int i = 0; i < 8; i++) {
+				glm::vec4 vec_result = { strip_vect[(j * 8 + i) * 6],strip_vect[(j * 8 + i) * 6 + 1],strip_vect[(j * 8 + i) * 6 + 2],1 };
+				vec_result = mat_rotate*vec_result;
+				strip_vect[((j + 1) * 8 + i) * 6] = vec_result.x;
+				strip_vect[((j + 1) * 8 + i) * 6 + 1] = vec_result.y;
+				strip_vect[((j + 1) * 8 + i) * 6 + 2] = vec_result.z;
+			}
+		}
+		//나머지 애들 크기증가해야함
+		break;
+	case 101://e: x회전
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(15.0f), glm::vec3(1, 0, 0));
+		strip_rotate = mat_rotate*strip_rotate;
+		break;
+	case 114://r: y회전
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(15.0f), glm::vec3(0, 1, 0));
+		strip_rotate = mat_rotate*strip_rotate;
+		break;
+	case 116://t: z회전
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(15.0f), glm::vec3(0, 0, 1));
+		strip_rotate = mat_rotate*strip_rotate;
+		break;
+	case 100://d: -x회전
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(-15.0f), glm::vec3(1, 0, 0));
+		strip_rotate = mat_rotate*strip_rotate;
+		break;
+	case 102://f: -y회전
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(-15.0f), glm::vec3(0, 1, 0));
+		strip_rotate = mat_rotate*strip_rotate;
+		break;
+	case 103://g: -z회전
+		mat_rotate = glm::rotate(glm::mat4(), glm::radians(-15.0f), glm::vec3(0, 0, 1));
+		strip_rotate = mat_rotate*strip_rotate;
+		break;
+		//회전
+	case 121://y: x증가
+		mat_scale = glm::scale(glm::mat4(), glm::vec3(1.1, 1, 1));
+		strip_scale = mat_scale*strip_scale;
+		break;
+	case 117://u: y증가
+		mat_scale = glm::scale(glm::mat4(), glm::vec3(1, 1.1, 1));
+		strip_scale = mat_scale*strip_scale;
+		break;
+	case 105://i: z증가
+		mat_scale = glm::scale(glm::mat4(), glm::vec3(1, 1, 1.1));
+		strip_scale = mat_scale*strip_scale;
+		break;
+	case 104://h: x감소
+		mat_scale = glm::scale(glm::mat4(), glm::vec3(0.9, 1, 1));
+		strip_scale = mat_scale*strip_scale;
+		break;
+	case 106://j: y감소
+		mat_scale = glm::scale(glm::mat4(), glm::vec3(1, 0.9, 1));
+		strip_scale = mat_scale*strip_scale;
+		break;
+	case 107://k: z감소
+		mat_scale = glm::scale(glm::mat4(), glm::vec3(1, 1, 0.9));
+		strip_scale = mat_scale*strip_scale;
+		break;
+	case 99://c: 색 변경
+		strip_color[0] = (rand() % 100) / 100.0;
+		strip_color[1] = (rand() % 100) / 100.0;
+		strip_color[2] = (rand() % 100) / 100.0;
+		break;
+	case 27://Esc
+			//종료
+		exit(0);
+		break;
+	default:
+		break;
+	}
+	glutPostRedisplay();//스크린 변화 반영
+
+}
+void renderScene(void)
+{
+
+	//Clear all pixels
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//Let's draw something here
+	GLuint transLoc = glGetUniformLocation(g_programID, "translate");
+	glm::mat4 mat_translate = glm::translate(glm::mat4(), strip_trans);
+	glUniformMatrix4fv(transLoc, 1, GL_FALSE, &mat_translate[0][0]);
+	GLuint rotateLoc = glGetUniformLocation(g_programID, "rotate");
+	glm::mat4 mat_rotate = glm::rotate(glm::mat4(), glm::radians(90.0f), glm::vec3(1, 1, 0));
+	//x,y 축 기준 90도 돌리겠다 (첫 시작 시 3차원모양이 잘 보이게 하기위해)
+	mat_rotate = mat_rotate*strip_rotate;
+	glUniformMatrix4fv(rotateLoc, 1, GL_FALSE, &mat_rotate[0][0]);
+	GLuint scaleLoc = glGetUniformLocation(g_programID, "scale");
+	glUniformMatrix4fv(scaleLoc, 1, GL_FALSE, &strip_scale[0][0]);
+	glBindBuffer(GL_ARRAY_BUFFER, buf);//sizeof(float)*v_count
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf_index);//sizeof(float)*v_count
+	GLint posAttrib = glGetAttribLocation(g_programID, "pos");
+	GLint colAttrib = glGetAttribLocation(g_programID, "col");
+	glLineWidth(1);//선 두께 설정
+
+	glBufferData(GL_ARRAY_BUFFER, strip_vect.size() * sizeof(GLfloat), strip_vect.data(), GL_DYNAMIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, strip_vect_index.size() * sizeof(GLuint), strip_vect_index.data(), GL_DYNAMIC_DRAW);
+	glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 6, 0);
+	glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, sizeof(GLfloat) * 6, (GLvoid*)(3 * sizeof(GLfloat)));
+	glEnableVertexAttribArray(posAttrib);
+	glEnableVertexAttribArray(colAttrib);
+	int sum=0;
+	for (int i = 1; i < strip_count; i++) {
+		sum += i * 2;
+	}
+	glDrawElements(GL_LINE_LOOP, 9 + strip_count * 40+sum, GL_UNSIGNED_INT, (GLvoid*)0);
+	//첫 9개로 원 하나 그리고 그뒤 추가되는 원 및 지그재그 하나당 필요한 인덱스 조합 39가지
+	glutSwapBuffers();
+}
+void init()
+{
+	//initilize the glew and check the errors.
+
+	GLenum res = glewInit();
+	if (res != GLEW_OK)
+	{
+		fprintf(stderr, "Error: '%s' \n", glewGetErrorString(res));
+	}
+
+	//select the background color
+	//초기화
+	glGenBuffers(1, &buf);
+	glGenBuffers(1, &buf_index);//버퍼 아이디 가져온당
+
+	strip_mode = 0;
+
+	strip_count = 0;//스트립 생성 수
+	strip_count_side = 8;//도형(원) 변 갯수
+	strip_size = 0.2;//도형 크기
+	strip_length = 0.5;//스트립 길이
+
+	strip_rotate = glm::rotate(glm::mat4(), glm::radians(0.0f), glm::vec3(1, 0, 0));//회전
+	strip_trans = { 0,0,0 };//이동
+	strip_scale = glm::scale(glm::mat4(), glm::vec3(1, 1, 1));//크기
+	
+	//glm::mat4 mat_translate;
+	//mat_translate = glm::translate(glm::mat4(), glm::vec3(0, 0, -0.8));
+	//vec_result = mat_translate*vec_result;
+	glm::mat4 mat_rotate;
+	mat_rotate = glm::rotate(glm::mat4(), glm::radians(45.0f), glm::vec3(1, 0, 0));
+	glm::vec4 vec_result = { 0,strip_size,0,1 };
+	for (int i = 0; i < 8; i++) {
+		strip_vect.push_back(vec_result.x);
+		strip_vect.push_back(vec_result.y);
+		strip_vect.push_back(vec_result.z - strip_length);
+		strip_vect.push_back(strip_color[0]);
+		strip_vect.push_back(strip_color[1]);
+		strip_vect.push_back(strip_color[2]);
+		vec_result = mat_rotate*vec_result;
+	}
+	strip_vect_index.push_back(0);
+	strip_vect_index.push_back(1);
+	strip_vect_index.push_back(2);
+	strip_vect_index.push_back(3);
+	strip_vect_index.push_back(4);
+	strip_vect_index.push_back(5);
+	strip_vect_index.push_back(6);
+	strip_vect_index.push_back(7);
+	strip_vect_index.push_back(0);
+	//9개
+	//첫 원 생성
+	//색 설정
+	glClearColor(1.0, 1.0, 1.0, 1.0);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
+}
+int main(int argc, char **argv)
+{
+	//init GLUT and create Window
+	//initialize the GLUT
+	glutInit(&argc, argv);
+	//GLUT_DOUBLE enables double buffering (drawing to a background buffer while the other buffer is displayed)
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+	//These two functions are used to define the position and size of the window. 
+	glutInitWindowPosition(200, 200);
+	glutInitWindowSize(ScreenX, ScreenY);
+	//This is used to define the name of the window.
+	glutCreateWindow("Simple OpenGL Window");
+
+	//call initization function
+	init();
+
+	//1.
+	//Generate VAO
+	GLuint VertexArrayID;
+	glGenVertexArrays(1, &VertexArrayID);
+	glBindVertexArray(VertexArrayID);
+
+	//3. 
+	g_programID = LoadShaders("VertexShader.txt", "FragmentShader.txt");
+	glUseProgram(g_programID);
+
+	glutKeyboardFunc(normalKeys);
+	glutSpecialFunc(specialKeys);
+	glutMouseFunc(myMouse);
+	glutDisplayFunc(renderScene);
+
+	//enter GLUT event processing cycle
+	glutMainLoop();
+
+	glDeleteVertexArrays(1, &VertexArrayID);
+
+	return 1;
+}
